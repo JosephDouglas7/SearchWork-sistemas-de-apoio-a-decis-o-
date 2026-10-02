@@ -1,0 +1,416 @@
+import os
+import webbrowser
+from pathlib import Path
+from urllib.parse import quote, quote_plus
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+# Lista de cidades
+CIDADES = [
+    "Caicó RN",
+    "Natal RN",
+    "Mossoró RN",
+    "João Pessoa PB",
+    "Recife PE",
+    "São Fernando RN",
+    "Timbaúba dos Batistas RN",
+    "São José do Seridó RN",
+    "Cruzeta RN",
+    "Jardim do Seridó RN",
+    "São João do Sabugi RN",
+    "Serra Negra do Norte RN",
+    "Jucurutu RN",
+    "Florânia RN",
+    "Ouro Branco RN",
+    "Várzea PB",
+]
+
+
+def gerar_links(produto, marca, preco_maximo, cidades):
+    termo_produto = " ".join(
+        parte for parte in [produto, marca] if parte
+    ).strip()
+
+    preco_centavos = int(preco_maximo * 100)
+    links = []
+
+    # Lojas nas quais a localização regional é útil
+    for cidade in cidades:
+        termo_local = f"{termo_produto} {cidade}"
+
+        links.extend([
+            {
+                "loja": "Mercado Livre",
+                "cidade": cidade,
+                "url": (
+                    "https://lista.mercadolivre.com.br/"
+                    f"{quote(termo_local.replace(' ', '-'))}"
+                    f"_PriceRange_0-{int(preco_maximo)}"
+                ),
+            },
+            {
+                "loja": "OLX",
+                "cidade": cidade,
+                "url": (
+                    "https://www.olx.com.br/brasil"
+                    f"?q={quote_plus(termo_local)}"
+                    f"&pe={int(preco_maximo)}"
+                ),
+            },
+        ])
+
+    # Lojas nacionais
+    links_nacionais = [
+        {
+            "loja": "Amazon",
+            "url": (
+                "https://www.amazon.com.br/s"
+                f"?k={quote_plus(termo_produto)}"
+                f"&rh=p_36%3A0-{preco_centavos}"
+            ),
+        },
+        {
+            "loja": "Magazine Luiza",
+            "url": (
+                "https://www.magazineluiza.com.br/busca/"
+                f"{quote(termo_produto.replace(' ', '-'))}/"
+            ),
+        },
+        {
+            "loja": "Casas Bahia",
+            "url": (
+                "https://www.casasbahia.com.br/busca/"
+                f"{quote(termo_produto.replace(' ', '-'))}/"
+            ),
+        },
+        {
+            "loja": "KaBuM!",
+            "url": (
+                "https://www.kabum.com.br/busca/"
+                f"{quote(termo_produto.replace(' ', '-'))}"
+            ),
+        },
+        {
+            "loja": "AliExpress",
+            "url": (
+                "https://www.aliexpress.com/wholesale"
+                f"?SearchText={quote_plus(termo_produto)}"
+            ),
+        },
+        {
+            "loja": "Americanas",
+            "url": (
+                "https://www.americanas.com.br/busca/"
+                f"{quote(termo_produto.replace(' ', '-'))}"
+            ),
+        },
+        {
+            "loja": "Shopee",
+            "url": (
+                "https://shopee.com.br/search"
+                f"?keyword={quote_plus(termo_produto)}"
+            ),
+        },
+        {
+            "loja": "Pichau",
+            "url": (
+                "https://www.pichau.com.br/search"
+                f"?q={quote_plus(termo_produto)}"
+            ),
+        },
+        {
+            "loja": "Carrefour",
+            "url": (
+                "https://www.carrefour.com.br/busca/"
+                f"{quote(termo_produto.replace(' ', '-'))}"
+            ),
+        },
+    ]
+
+    for item in links_nacionais:
+        item["cidade"] = "Loja nacional"
+        links.append(item)
+
+    return links
+
+
+def classificar_links(produto, links):
+    produto = produto.lower()
+
+    if any(p in produto for p in [
+        "celular", "notebook", "computador", "hardware",
+        "placa", "mouse", "teclado", "monitor"
+    ]):
+        prioridade = ["KaBuM!", "Pichau", "Amazon", "Mercado Livre"]
+
+    elif "livro" in produto:
+        prioridade = ["Amazon", "Americanas", "Mercado Livre"]
+
+    elif any(p in produto for p in [
+        "geladeira", "fogão", "micro-ondas",
+        "microondas", "tv", "eletrodoméstico"
+    ]):
+        prioridade = [
+            "Carrefour",
+            "Casas Bahia",
+            "Magazine Luiza",
+            "Mercado Livre",
+        ]
+
+    else:
+        prioridade = [
+            "Mercado Livre",
+            "Shopee",
+            "Amazon",
+            "OLX",
+            "AliExpress",
+        ]
+
+    ordem = {loja: indice for indice, loja in enumerate(prioridade)}
+
+    return sorted(
+        links,
+        key=lambda item: ordem.get(item["loja"], len(prioridade))
+    )
+
+
+def criar_relatorio(produto, marca, preco, links):
+    linhas = []
+
+    for item in links:
+        linhas.append(
+            f"""
+        <a href="{item['url']}" class="loja" target="_blank" rel="noopener noreferrer">
+            <strong>{item['loja']}</strong>
+            <span>{item['cidade']}</span>
+            <small>Abrir pesquisa ↗</small>
+        </a>
+        """
+        )
+
+    preco_formatado = f"{preco:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pesquisa de produtos</title>
+
+<style>
+body {{
+    margin: 0;
+    padding: 30px;
+    background: #f3f5f8;
+    color: #243040;
+    font-family: Arial, sans-serif;
+}}
+
+.container {{
+    max-width: 850px;
+    margin: auto;
+}}
+
+.cabecalho {{
+    padding: 25px;
+    margin-bottom: 20px;
+    color: white;
+    background: #1769e0;
+    border-radius: 16px;
+}}
+
+.cabecalho h1 {{
+    margin-top: 0;
+}}
+
+.resumo {{
+    padding: 18px;
+    margin-bottom: 20px;
+    background: white;
+    border-radius: 12px;
+}}
+
+.lojas {{
+    display: grid;
+    grid-template-columns: repeat(
+        auto-fit,
+        minmax(220px, 1fr)
+    );
+    gap: 12px;
+}}
+
+.loja {{
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 18px;
+    color: #243040;
+    text-decoration: none;
+    background: white;
+    border: 1px solid #dce2ea;
+    border-radius: 12px;
+    transition: 0.2s;
+}}
+
+.loja:hover {{
+    border-color: #1769e0;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px #00000018;
+}}
+
+.loja small {{
+    color: #1769e0;
+}}
+</style>
+</head>
+
+<body>
+<main class="container">
+<section class="cabecalho">
+    <h1>🔎 Pesquisa de produtos</h1>
+    <p>Escolha uma loja para visualizar os resultados.</p>
+</section>
+
+<section class="resumo">
+    <strong>Produto:</strong> {produto}<br>
+    <strong>Marca:</strong> {marca or "Qualquer marca"}<br>
+    <strong>Preço máximo:</strong> R$ {preco_formatado}
+</section>
+
+<section class="lojas">
+{''.join(linhas)}
+</section>
+</main>
+</body>
+</html>
+"""
+
+    arquivo = Path("resultados_busca.html").resolve()
+    arquivo.write_text(html, encoding="utf-8")
+
+    return arquivo
+
+
+# --- INTERFACE GRÁFICA (GUI) ---
+def iniciar_interface():
+    janela = tk.Tk()
+    janela.title("🔎 Buscador de Produtos")
+    janela.geometry("450x520")
+    janela.resizable(False, False)
+
+    # Estilo dos componentes
+    style = ttk.Style()
+    style.theme_use("clam")
+
+    container = ttk.Frame(janela, padding="25")
+    container.pack(fill=tk.BOTH, expand=True)
+
+    # Título da Interface
+    titulo = ttk.Label(
+        container,
+        text="🔎 Buscador de Produtos",
+        font=("Segoe UI", 16, "bold"),
+        foreground="#1769e0",
+    )
+    titulo.pack(anchor="w", pady=(0, 5))
+
+    subtitulo = ttk.Label(
+        container,
+        text="Preencha os filtros abaixo para buscar nas lojas:",
+        font=("Segoe UI", 9),
+        foreground="#555555",
+    )
+    subtitulo.pack(anchor="w", pady=(0, 20))
+
+    # Campo 1: Produto
+    ttk.Label(container, text="📦 Produto *", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+    ent_produto = ttk.Entry(container, font=("Segoe UI", 10))
+    ent_produto.pack(fill=tk.X, pady=(3, 12))
+    ent_produto.focus()
+
+    # Campo 2: Marca
+    ttk.Label(container, text="🏷️ Marca (opcional)", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+    ent_marca = ttk.Entry(container, font=("Segoe UI", 10))
+    ent_marca.pack(fill=tk.X, pady=(3, 12))
+
+    # Campo 3: Preço
+    ttk.Label(container, text="💰 Preço Máximo (R$) *", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+    ent_preco = ttk.Entry(container, font=("Segoe UI", 10))
+    ent_preco.pack(fill=tk.X, pady=(3, 12))
+
+    # Campo 4: Cidade
+    ttk.Label(container, text="📍 Cidade da Busca *", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+    opcoes_cidade = ["Todas as Cidades"] + CIDADES
+    combo_cidade = ttk.Combobox(
+        container, values=opcoes_cidade, state="readonly", font=("Segoe UI", 10)
+    )
+    combo_cidade.current(0)
+    combo_cidade.pack(fill=tk.X, pady=(3, 22))
+
+    # Ação do Botão
+    def ao_clicar_buscar():
+        produto = ent_produto.get().strip()
+        marca = ent_marca.get().strip()
+        preco_raw = ent_preco.get().strip().replace(".", "").replace(",", ".")
+        cidade_selecionada = combo_cidade.get()
+
+        if not produto:
+            messagebox.showwarning("Aviso", "Por favor, digite o nome do produto.")
+            ent_produto.focus()
+            return
+
+        if not preco_raw:
+            messagebox.showwarning("Aviso", "Por favor, informe o preço máximo.")
+            ent_preco.focus()
+            return
+
+        try:
+            preco = float(preco_raw)
+            if preco <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror(
+                "Erro no Preço",
+                "Digite um valor válido para o preço.\nExemplo: 1500 ou 1500,50",
+            )
+            ent_preco.focus()
+            return
+
+        if cidade_selecionada == "Todas as Cidades":
+            cidades_busca = CIDADES.copy()
+        else:
+            cidades_busca = [cidade_selecionada]
+
+        # Processa e gera o relatório
+        links = gerar_links(produto, marca, preco, cidades_busca)
+        links = classificar_links(produto, links)
+        relatorio = criar_relatorio(produto, marca, preco, links)
+
+        # Abre no navegador
+        webbrowser.open(relatorio.as_uri())
+
+        messagebox.showinfo(
+            "Sucesso!",
+            f"Relatório gerado com {len(links)} pesquisas!\nO resultado foi aberto no seu navegador.",
+        )
+
+    # Botão de Executar
+    btn_buscar = tk.Button(
+        container,
+        text="🚀 Gerar Pesquisa",
+        font=("Segoe UI", 11, "bold"),
+        bg="#1769e0",
+        fg="white",
+        activebackground="#1151b3",
+        activeforeground="white",
+        relief="flat",
+        cursor="hand2",
+        command=ao_clicar_buscar,
+    )
+    btn_buscar.pack(fill=tk.X, ipady=8)
+
+    janela.mainloop()
+
+
+if __name__ == "__main__":
+    iniciar_interface()
